@@ -1,0 +1,98 @@
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw
+import json
+import cv2
+import seaborn as sns
+from datetime import datetime
+import os
+%matplotlib inline
+
+# Input data files are available in the "../input/" directory.
+# For example, running this (by clicking run or pressing Shift+Enter) will list all files under the input directory
+
+# loading datasets as json
+with open("../input/iwildcam-2020-fgvc7/iwildcam2020_megadetector_results.json") as json_file:
+    megadetector_results = json.load(json_file)
+with open("../input/iwildcam-2020-fgvc7/iwildcam2020_test_information.json") as json_file:
+    test_information = json.load(json_file)
+with open("../input/iwildcam-2020-fgvc7/iwildcam2020_train_annotations.json") as json_file:
+    train_annotations = json.load(json_file)
+    
+train_annotations.keys()
+# converting into dataframes
+train_annot = pd.DataFrame(train_annotations["annotations"])
+train_images = pd.DataFrame(train_annotations["images"])
+train_cat = pd.DataFrame(train_annotations["categories"])
+
+# Test dataset
+test_images = pd.DataFrame(test_information["images"])
+test_data = test_images[["file_name","id"]].copy()
+test_data['Category'] = 0
+
+# Any results you write to the current directory are saved as output.
+train_images.rename({"id":"image_id"}, axis = 1, inplace= True)
+
+train = train_images.merge(train_annot, on = "image_id", how = "inner")
+
+train = train.merge(train_cat.drop("count", axis=1).rename({"id":"category_id"}, axis = 1))
+train.tail()
+tr=train[['file_name','category_id']]
+tr.to_csv('tr.csv',index=False)
+
+print('Number of train images',len(train_images))
+print('Number of test images',len(test_images))
+
+# Viewing images in train folder
+w, ax = plt.subplots(2,2)
+im1 = Image.open('../input/iwildcam-2020-fgvc7/train/939e25fc-21bc-11ea-a13a-137349068a90.jpg')
+im2 = Image.open('../input/iwildcam-2020-fgvc7/test/867665c4-21bc-11ea-a13a-137349068a90.jpg')
+im3 = Image.open('../input/iwildcam-2020-fgvc7/train/8676382e-21bc-11ea-a13a-137349068a90.jpg')
+im4 = Image.open('../input/iwildcam-2020-fgvc7/train/86760c00-21bc-11ea-a13a-137349068a90.jpg')
+
+ax[0,0].imshow(im1)
+ax[0,1].imshow(im2) 
+ax[1,0].imshow(im3)
+ax[1,1].imshow(im4)
+
+tr.head() # csv file for train data
+!git clone https://github.com/Tessellate-Imaging/monk_v1.git
+! cd monk_v1/installation/Misc && pip install -r requirements_kaggle.txt
+
+# Monk
+#Using Mx-net
+import os
+import sys
+sys.path.append("/kaggle/working/monk_v1/monk/");
+from gluon_prototype import prototype
+gtf = prototype(verbose=1);
+gtf.Prototype("iWildCam2020", "Using-densenet121");
+gtf.Default(dataset_path="../input/iwildcam-2020-fgvc7/train/",
+            path_to_csv="/kaggle/working/tr.csv", # updated csv file 
+            model_name="densenet121", 
+            freeze_base_network=False,
+            num_epochs=1);
+
+gtf.Dataset_Percent(3); # for taking only 3% of dataset for training
+gtf = prototype(verbose=1);
+gtf.Prototype("iWildCam2020", "Using-densenet121");
+gtf.Default(dataset_path="../input/iwildcam-2020-fgvc7/train/",
+            path_to_csv="/kaggle/working/sampled_dataset_train.csv", # updated csv file 
+            model_name="densenet121", 
+            freeze_base_network=False,
+            num_epochs=6); 
+
+gtf.EDA(check_corrupt=True); # for checking for corrupt images in 3% dataset
+
+gtf.Train();
+
+
+gtf = prototype(verbose=1);
+gtf.Prototype("iWildCam2020", "Using-densenet121", eval_infer=True);
+
+sample = "../input/iwildcam-2020-fgvc7/test/86767820-21bc-11ea-a13a-137349068a90.jpg";
+predictions = gtf.Infer(img_name=sample);
+#Display 
+from IPython.display import Image
+Image(filename=sample)
